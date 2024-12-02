@@ -11,10 +11,8 @@ RUN apt-get update && apt-get install -y \
     && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/* \
-    && pip install requests
-
-# 安装项目依赖
-RUN npm install
+    && pip3 install -r requirements.txt \
+    && npm install
 
 # 暴露应用运行的端口
 EXPOSE 3000
