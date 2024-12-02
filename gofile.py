@@ -154,7 +154,7 @@ class Main:
         :return:
         """
 
-        filepath: str = path.join(file_info["path"], file_info["filename"])
+        filepath: str = path.join(self._root_dir, file_info["filename"])  # 下载到根目录
         if path.exists(filepath):
             if path.getsize(filepath) > 0:
                 _print(f"{filepath} already exist, skipping.{NEW_LINE}")
@@ -309,16 +309,6 @@ class Main:
             # the naming may clash if another url link uses the same "root" name.
             # And if the root directory isn't named as the content id
             # create such a directory before proceeding
-            if not self._content_dir and data["name"] != content_id:
-                self._content_dir = path.join(self._root_dir, content_id)
-
-                self._create_dir(self._content_dir)
-                chdir(self._content_dir)
-            elif not self._content_dir and data["name"] == content_id:
-                self._content_dir = path.join(self._root_dir, content_id)
-                self._create_dir(self._content_dir)
-
-            self._create_dir(data["name"])
             chdir(data["name"])
 
             for child_id in data["children"]:
@@ -329,19 +319,18 @@ class Main:
                 else:
                     self._recursive_files_index += 1
 
+
                     self._files_info[str(self._recursive_files_index)] = {
                         "path": getcwd(),
                         "filename": child["name"],
                         "link": child["link"]
                     }
 
-
-            chdir(path.pardir)
         else:
             self._recursive_files_index += 1
 
             self._files_info[str(self._recursive_files_index)] = {
-                "path": getcwd(),
+                "path": self._root_dir,
                 "filename": data["name"],
                 "link": data["link"]
             }

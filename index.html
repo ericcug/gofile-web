@@ -75,8 +75,7 @@
 
     <div id="url-container">
         <div class="url-input">
-            <input type="text" placeholder="Enter URL (must start with http)">
-            <button onclick="addUrlInput()">+</button>
+            <input type="text" id="url-input" placeholder="Enter URL (must start with http)">
         </div>
     </div>
 
@@ -98,7 +97,7 @@
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ urls: [url] }),
+                body: JSON.stringify({ url }),
             })
                 .then(response => response.text())
                 .then(data => {
