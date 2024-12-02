@@ -84,7 +84,7 @@
     <div id="output"></div>
 
     <script>
-        function startDownload () {
+        function startDownload() {
             const url = document.getElementById('url-input').value.trim();
 
             if (!url.startsWith('http')) {
@@ -112,7 +112,32 @@
 
         const ws = new WebSocket(`ws://${window.location.host}`);
         ws.onmessage = (event) => {
-            document.getElementById('output').textContent = event.data;
+            try {
+                const message = JSON.parse(event.data);
+                const output = document.getElementById('output');
+                if (message.type === 'progress') {
+                    const lines = output.textContent.split('\n');
+                    lines.unshift(`下载进度: ${message.data}`);
+                    if (lines.length > 10) {
+                        lines.pop();
+                    }
+                    output.textContent = lines.join('\n');
+                } else if (message.type === 'complete') {
+                    output.textContent += '\n下载完成';
+                }
+            } catch (error) {
+                console.error('WebSocket 消息解析错误:', error);
+            }
+        };
+
+        ws.onerror = (error) => {
+            console.error('WebSocket 错误:', error);
+            document.getElementById('output').textContent = '连接错误,请刷新页面重试';
+        };
+
+        ws.onclose = () => {
+            console.log('WebSocket 连接已关闭');
+            document.getElementById('output').textContent += '\n连接已断开';
         };
     </script>
 </body>

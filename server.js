@@ -1,13 +1,22 @@
-const express = require('express');
-const bodyParser = require('body-parser');
-const { spawn } = require('child_process');
-const path = require('path');
-const http = require('http');
-const WebSocket = require('ws');
+// 使用 ES 模块导入语法
+import express from 'express';
+import bodyParser from 'body-parser';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+import http from 'http';
+import {WebSocket, WebSocketServer } from 'ws';
+import GoFileDownloader from './gofile.js';
+
+// 获取 __dirname 替代方案（ES 模块中不直接支持 __dirname）
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const downloader = new GoFileDownloader();
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+const wss = new WebSocketServer({ server });
 
 const PORT = process.env.PORT || 3000;
 
@@ -20,67 +29,83 @@ const log = (message) => {
     return `[${timestamp}] ${message}`;
 };
 
+// WebSocket 连接处理 - 移到外面
+wss.on('connection', (ws) => {
+    log('WebSocket connection established');
+    ws.on('message', (message) => {
+        log(`Received message: ${message}`);
+    });
+    ws.on('error', (error) => {
+        log(`WebSocket error: ${error.message}`, 'error');
+    });
+});
+
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-app.post('/download', (req, res) => {
+// URL 验证函数
+const isValidUrl = (url) => {
+    try {
+        new URL(url);
+        return true;
+    } catch {
+        return false;
+    }
+};
+
+app.post('/download', async (req, res) => {
     const url = req.body.url.trim();
 
-    if (url.length === 0) {
-        return res.status(400).send('No valid URLs provided');
-    }
-
-    const command = `python3 gofile.py ${url}`;
-    log(`Executing command: ${command}`);
-
-    const gofile = spawn('python3', ['gofile.py', url]);
-
-    const stripAnsi = (str) => str.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
-
-    let lastProgressLine = '';
-
-    function processOutput(data) {
-        const lines = stripAnsi(data.toString()).split('\n');
-        const lastLine = lines[lines.length - 1].trim(); // 获取倒数第二行，因为最后一行可能是空行
-        if (lastLine && lastLine.includes('%')) {
-            lastProgressLine = lastLine;
-            wss.clients.forEach((client) => {
-                if (client.readyState === WebSocket.OPEN) {
-                    client.send(lastProgressLine);
-                }
-            });
-        }
-    }
-
-    gofile.stdout.on('data', processOutput);
-    gofile.stderr.on('data', processOutput);
-
-    gofile.on('error', (error) => {
-        console.error(`Error: ${error.message}`);
-    });
-
-    wss.on('connection', (ws) => {
-        console.log('WebSocket connection established');
-        ws.on('message', (message) => {
-            console.log('Received message:', message);
+    if (!url || !isValidUrl(url)) {
+        return res.status(400).json({
+            error: 'Invalid URL provided'
         });
-    });
+    }
 
-    gofile.on('close', (code) => {
-        if (code !== 0) {
-            const logMessage = log(`Download process exited with code: ${code}`);
+    try {
+        downloader.onProgress = (progress) => {
             wss.clients.forEach((client) => {
                 if (client.readyState === WebSocket.OPEN) {
-                    client.send(logMessage);
+                    client.send(JSON.stringify({
+                        type: 'progress',
+                        data: progress
+                    }));
                 }
             });
-        }
-    });
+        };
 
-    res.send('Download started');
+        await downloader.download(url);
+        return res.json({ message: 'Download completed successfully' });
+    } catch (error) {
+        log(`Download error: ${error.stack || error.message}`, 'error');
+        return res.status(500).json({
+            error: 'Download failed',
+            message: error.message,
+            timestamp: new Date().toISOString()
+        });
+    }
+});
+
+// 错误处理中间件
+app.use((err, req, res, next) => {
+    const errorMessage = `Server error (${req.method} ${req.path}): ${err.message}`;
+    log(errorMessage, 'error');
+    res.status(500).json({
+        error: 'Internal server error',
+        message: err.message,
+        path: req.path,
+        timestamp: new Date().toISOString()
+    });
 });
 
 server.listen(PORT, () => {
     log(`Server is running on http://localhost:${PORT}`)
+});
+
+process.on('SIGTERM', () => {
+    server.close(() => {
+        log('Server shutdown complete');
+        process.exit(0);
+    });
 });
