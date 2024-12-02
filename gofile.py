@@ -59,7 +59,7 @@ class Main:
         self._max_workers: int = max_workers
         token: str | None = getenv("GF_TOKEN")
         self._message: str = " "
-        self._content_dir: str | None = None
+        self._content_dir: str = getcwd()  # 设置为当前目录
 
         # Keeps track of the number of recursion to get to the file
         self._recursive_files_index: int = 0
@@ -84,17 +84,9 @@ class Main:
         :return:
         """
 
-        if not self._content_dir:
-            _print(f"Content directory wasn't created, nothing done.{NEW_LINE}")
-            return
-
-        chdir(self._content_dir)
-
         with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
             for item in self._files_info.values():
                 executor.submit(self._download_content, item)
-
-        chdir(self._root_dir)
 
 
     def _create_dir(self, dirname: str) -> None:
@@ -305,12 +297,6 @@ class Main:
             return
 
         if data["type"] == "folder":
-            # Do not use the default root directory named "root" created by gofile,
-            # the naming may clash if another url link uses the same "root" name.
-            # And if the root directory isn't named as the content id
-            # create such a directory before proceeding
-            chdir(data["name"])
-
             for child_id in data["children"]:
                 child: dict[Any, Any] = data["children"][child_id]
 
@@ -319,18 +305,16 @@ class Main:
                 else:
                     self._recursive_files_index += 1
 
-
                     self._files_info[str(self._recursive_files_index)] = {
-                        "path": getcwd(),
+                        "path": self._root_dir,  # 下载到根目录
                         "filename": child["name"],
                         "link": child["link"]
                     }
-
         else:
             self._recursive_files_index += 1
 
             self._files_info[str(self._recursive_files_index)] = {
-                "path": self._root_dir,
+                "path": self._root_dir,  # 下载到根目录
                 "filename": data["name"],
                 "link": data["link"]
             }
@@ -389,15 +373,8 @@ class Main:
         self._parse_links_recursively(content_id, _password)
 
         # probably the link is broken so the content dir wasn't even created.
-        if not self._content_dir:
-            _print(f"No content directory created for url: {url}, nothing done.{NEW_LINE}")
-            self._reset_class_properties()
-            return
-
-        # removes the root content directory if there's no file or subdirectory
-        if not listdir(self._content_dir) and not self._files_info:
-            _print(f"Empty directory for url: {url}, nothing done.{NEW_LINE}")
-            rmdir(self._content_dir)
+        if not self._files_info:
+            _print(f"No files found for url: {url}, nothing done.{NEW_LINE}")
             self._reset_class_properties()
             return
 
@@ -415,7 +392,6 @@ class Main:
 
             if not input_list:
                 _print(f"Nothing done.{NEW_LINE}")
-                rmdir(self._content_dir)
                 self._reset_class_properties()
                 return
 
