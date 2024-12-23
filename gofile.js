@@ -88,7 +88,7 @@ class GoFileDownloader {
 			await Promise.all(extractPromises);
 			return true;
 		} catch (error) {
-			reject(error);
+			throw(error);
 		};
 	}
 
