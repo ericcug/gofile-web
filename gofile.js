@@ -3,7 +3,7 @@ import fetch from 'node-fetch';
 import { createHash } from 'crypto';
 import { createWriteStream, existsSync, statSync } from 'fs';
 import { mkdir, readdir, unlink, cp, rm } from 'fs/promises';
-import { JSZip } from 'jszip';
+import JSZip from 'jszip';
 import { join, basename, dirname } from 'path';
 
 /**
