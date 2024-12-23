@@ -4,7 +4,7 @@ import { createHash } from 'crypto';
 import { createWriteStream, existsSync, statSync } from 'fs';
 import { mkdir, readdir, unlink, cp, rm } from 'fs/promises';
 import AdmZip from 'adm-zip';
-import { join, basename } from 'path';
+import { join, basename, dirname } from 'path';
 
 /**
  * GoFileDownloader - A class to download and organize files from GoFile.io
@@ -208,12 +208,13 @@ class GoFileDownloader {
 		const fileStream = createWriteStream(tmpFile, { flags: 'a' });
 		const startTime = performance.now();
 		let downloadedSize = partSize;
-		let message = '';
+		let progressMessage = '';
 
 		await new Promise((resolve, reject) => {
 			let lastUpdate = 0;
 			response.body.on('data', (chunk) => {
 				downloadedSize += chunk.length;
+				fileStream.write(chunk);
 				const now = Date.now();
 				if (now - lastUpdate >= this.progressThrottle) {
 					const progress = (downloadedSize / parseInt(totalSize)) * 100;
@@ -232,18 +233,21 @@ class GoFileDownloader {
 				}
 			});
 
-			response.body.pipe(fileStream);
-			response.body.on('error', reject);
-			fileStream.on('finish', resolve);
-			fileStream.on('error', (err) => {
+			response.body.on('end', () => {
+				fileStream.end();
+				resolve();
+			});
+
+			response.body.on('error', (err) => {
 				fileStream.close();
 				reject(err);
 			});
 		});
 
 		if (statSync(tmpFile).size === parseInt(totalSize)) {
-			await rename(tmpFile, filepath);
-			process.stdout.write('\r' + ' '.repeat(message.length));
+			await cp(tmpFile, filepath, { recursive: true });
+			await rm(tmpFile, { recursive: true });
+			process.stdout.write('\r' + ' '.repeat(progressMessage.length));
 			console.log(`\rDownloading ${fileInfo.filename}: ${totalSize} of ${totalSize} Done!`);
 			await this.organizeMusicFolder(filepath);
 		}
@@ -274,6 +278,10 @@ class GoFileDownloader {
 	async organizeMusicFolder(sourcePath) {
 		if (!this.musicDir) {
 			return; // 如果没有设置音乐目录，直接返回
+		}
+
+		if (existsSync(sourcePath)) {
+			await unlink(sourcePath);
 		}
 
 		try {
