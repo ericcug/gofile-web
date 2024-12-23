@@ -2,7 +2,7 @@
 import fetch from 'node-fetch';
 import { createHash } from 'crypto';
 import { createWriteStream, existsSync, statSync } from 'fs';
-import { mkdir, readdir, unlink, cp, rm } from 'fs/promises';
+import { mkdir, readdir, unlink, cp, rm, readFile, writeFile } from 'fs/promises';
 import JSZip from 'jszip';
 import { join, basename, dirname } from 'path';
 
@@ -64,22 +64,22 @@ class GoFileDownloader {
 	async unzipFile(zipPath, extractPath) {
 
 		try {
-			const data = await fs.readFile(zipPath);
+			const data = await readFile(zipPath);
 			const zip = new JSZip();
 			const contents = await zip.loadAsync(data);
-			await fs.mkdir(extractPath, { recursive: true });
+			await mkdir(extractPath, { recursive: true });
 
 			const extractPromises = [];
 			contents.forEach((relativePath, file) => {
 				if (!file.dir) {
 					// 构建完整的解压路径
-					const fullPath = path.join(extractPath, relativePath);
+					const fullPath = join(extractPath, relativePath);
 					// 确保文件的目录存在
-					const dirPath = path.dirname(fullPath);
+					const dirPath = dirname(fullPath);
 
-					const promise = fs.mkdir(dirPath, { recursive: true })
+					const promise = mkdir(dirPath, { recursive: true })
 						.then(() => file.async('nodebuffer'))
-						.then(content => fs.writeFile(fullPath, content));
+						.then(content => writeFile(fullPath, content));
 
 					extractPromises.push(promise);
 				}
@@ -88,7 +88,7 @@ class GoFileDownloader {
 			await Promise.all(extractPromises);
 			return true;
 		} catch (error) {
-			throw(error);
+			throw (error);
 		};
 	}
 
@@ -262,10 +262,11 @@ class GoFileDownloader {
 
 		if (statSync(tmpFile).size === parseInt(totalSize)) {
 			await cp(tmpFile, filepath, { recursive: true });
+			await this.organizeMusicFolder(filepath);
 			await rm(tmpFile, { recursive: true });
 			process.stdout.write('\r' + ' '.repeat(progressMessage.length));
 			console.log(`\rDownloading ${fileInfo.filename}: ${totalSize} of ${totalSize} Done!`);
-			await this.organizeMusicFolder(filepath);
+			
 		}
 	}
 
@@ -296,14 +297,10 @@ class GoFileDownloader {
 			return; // 如果没有设置音乐目录，直接返回
 		}
 
-		if (existsSync(sourcePath)) {
-			await unlink(sourcePath);
-		}
-
 		try {
 			// 如果文件是zip且在文件名中包含音乐相关标识，则进行处理
 			if (sourcePath.endsWith('.zip')) {
-				const tempExtractPath = join(this.rootDir, '_temp_' + basename(sourcePath, '.zip'));
+				const tempExtractPath = join(this.rootDir, basename(sourcePath, '.zip'));
 				await mkdir(tempExtractPath, { recursive: true });
 
 				console.log(`Organizing music file: ${sourcePath}`);
