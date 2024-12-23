@@ -3,7 +3,8 @@ import fetch from 'node-fetch';
 import { createHash } from 'crypto';
 import { createWriteStream, existsSync, statSync } from 'fs';
 import { mkdir, readdir, unlink, cp, rm } from 'fs/promises';
-import AdmZip from 'adm-zip';
+//import AdmZip from 'adm-zip';
+import { decompress} from 'decompress';
 import { join, basename, dirname } from 'path';
 
 /**
@@ -288,7 +289,8 @@ class GoFileDownloader {
 				await mkdir(tempExtractPath, { recursive: true });
 
 				console.log(`Organizing music file: ${sourcePath}`);
-				await this.unzipFile(sourcePath, tempExtractPath);
+				//await this.unzipFile(sourcePath, tempExtractPath);
+				await decompress(sourcePath, tempExtractPath);
 
 				const extractedItems = await readdir(tempExtractPath);
 
