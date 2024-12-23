@@ -3,8 +3,7 @@ import fetch from 'node-fetch';
 import { createHash } from 'crypto';
 import { createWriteStream, existsSync, statSync } from 'fs';
 import { mkdir, readdir, unlink, cp, rm } from 'fs/promises';
-//import AdmZip from 'adm-zip';
-import { decompress} from 'decompress';
+import { JSZip } from 'jszip';
 import { join, basename, dirname } from 'path';
 
 /**
@@ -63,15 +62,34 @@ class GoFileDownloader {
 	 * @returns {Promise<void>}
 	 */
 	async unzipFile(zipPath, extractPath) {
-		return new Promise((resolve, reject) => {
-			try {
-				const zip = new AdmZip(zipPath);
-				zip.extractAllTo(extractPath, true);
-				resolve();
-			} catch (error) {
-				reject(error);
-			}
-		});
+
+		try {
+			const data = await fs.readFile(zipPath);
+			const zip = new JSZip();
+			const contents = await zip.loadAsync(data);
+			await fs.mkdir(extractPath, { recursive: true });
+
+			const extractPromises = [];
+			contents.forEach((relativePath, file) => {
+				if (!file.dir) {
+					// 构建完整的解压路径
+					const fullPath = path.join(extractPath, relativePath);
+					// 确保文件的目录存在
+					const dirPath = path.dirname(fullPath);
+
+					const promise = fs.mkdir(dirPath, { recursive: true })
+						.then(() => file.async('nodebuffer'))
+						.then(content => fs.writeFile(fullPath, content));
+
+					extractPromises.push(promise);
+				}
+			});
+
+			await Promise.all(extractPromises);
+			return true;
+		} catch (error) {
+			reject(error);
+		};
 	}
 
 	/**
@@ -289,8 +307,7 @@ class GoFileDownloader {
 				await mkdir(tempExtractPath, { recursive: true });
 
 				console.log(`Organizing music file: ${sourcePath}`);
-				//await this.unzipFile(sourcePath, tempExtractPath);
-				await decompress(sourcePath, tempExtractPath);
+				await this.unzipFile(sourcePath, tempExtractPath);
 
 				const extractedItems = await readdir(tempExtractPath);
 
