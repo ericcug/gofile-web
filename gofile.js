@@ -2,12 +2,23 @@
 import fetch from 'node-fetch';
 import { createHash } from 'crypto';
 import { createWriteStream, existsSync, statSync } from 'fs';
-import { mkdir, rename, stat, readdir, unlink, rmdir } from 'fs/promises';
+import { mkdir, readdir, unlink, cp, rm } from 'fs/promises';
 import AdmZip from 'adm-zip';
 import { join, basename } from 'path';
 
+/**
+ * GoFileDownloader - A class to download and organize files from GoFile.io
+ * Features:
+ * - Downloads files from GoFile.io with resume support
+ * - Handles folder structures recursively
+ * - Organizes music files into artist/album structure
+ * - Supports password protected content
+ */
 class GoFileDownloader {
-	// 认证相关函数
+	/**
+	 * Initialize the downloader
+	 * @param {string} rootDir - Base directory for downloads
+	 */
 	constructor(rootDir) {
 		this.rootDir = process.env.GF_DOWNLOADDIR || process.cwd();
 		this.musicDir = process.env.GF_MUSICDIR || '';
@@ -18,7 +29,12 @@ class GoFileDownloader {
 		this.progressThrottle = 500;
 	}
 
-	async getToken () {
+	/**
+	 * Get authentication token from GoFile.io
+	 * @returns {Promise<string>} Authentication token
+	 * @throws {Error} If account creation fails
+	 */
+	async getToken() {
 		const headers = {
 			'User-Agent': process.env.GF_USERAGENT || 'Mozilla/5.0',
 			'Accept-Encoding': 'gzip, deflate, br',
@@ -38,9 +54,14 @@ class GoFileDownloader {
 
 		return data.data.token;
 	}
-	
-	// 文件处理相关函数
-	async unzipFile (zipPath, extractPath) {
+
+	/**
+	 * Extract ZIP file to specified path
+	 * @param {string} zipPath - Path to ZIP file
+	 * @param {string} extractPath - Path to extract files to
+	 * @returns {Promise<void>}
+	 */
+	async unzipFile(zipPath, extractPath) {
 		return new Promise((resolve, reject) => {
 			try {
 				const zip = new AdmZip(zipPath);
@@ -52,7 +73,13 @@ class GoFileDownloader {
 		});
 	}
 
-	async parseLinksRecursively (contentId, password) {
+	/**
+	 * Recursively parse GoFile.io links from folder structure
+	 * @param {string} contentId - GoFile content ID
+	 * @param {string} [password] - Optional password for protected content
+	 * @throws {Error} If content fetch fails
+	 */
+	async parseLinksRecursively(contentId, password) {
 		const url = new URL(`https://api.gofile.io/contents/${contentId}`);
 		url.searchParams.append('wt', '4fd6sg89d7s6');
 		url.searchParams.append('cache', 'true');
@@ -100,8 +127,13 @@ class GoFileDownloader {
 		}
 	}
 
-	// 下载相关函数
-	async download (url, password) {
+	/**
+	 * Main download function
+	 * @param {string} url - GoFile.io URL
+	 * @param {string} [password] - Optional password
+	 * @throws {Error} If URL format is invalid
+	 */
+	async download(url, password) {
 		try {
 			const urlParts = url.split('/');
 			if (urlParts[urlParts.length - 2] !== 'd') {
@@ -127,7 +159,14 @@ class GoFileDownloader {
 		}
 	}
 
-	async downloadContent (fileInfo) {
+	/**
+	 * Download single file content with progress
+	 * @param {Object} fileInfo - File information object
+	 * @param {string} fileInfo.filename - File name
+	 * @param {string} fileInfo.link - Download link
+	 * @returns {Promise<void>}
+	 */
+	async downloadContent(fileInfo) {
 		const filepath = join(this.rootDir, fileInfo.filename);
 		if (existsSync(filepath) && statSync(filepath).size > 0) {
 			console.log(`${filepath} already exists, skipping.`);
@@ -210,8 +249,13 @@ class GoFileDownloader {
 		}
 	}
 
-	// 音乐整理相关函数
-	parseArtistAlbum (folderName) {
+	/**
+	 * Parse artist and album from folder name
+	 * @param {string} folderName - Folder name in "Artist - Album" format
+	 * @returns {Object} Object containing artist and album
+	 * @throws {Error} If folder name format is invalid
+	 */
+	parseArtistAlbum(folderName) {
 		const parts = folderName.split(' - ');
 		if (parts.length !== 2) {
 			throw new Error(`Invalid folder name format: ${folderName}`);
@@ -222,7 +266,12 @@ class GoFileDownloader {
 		};
 	}
 
-	async organizeMusicFolder (sourcePath) {
+	/**
+	 * Organize music files into artist/album structure
+	 * @param {string} sourcePath - Path to source ZIP file
+	 * @returns {Promise<void>}
+	 */
+	async organizeMusicFolder(sourcePath) {
 		if (!this.musicDir) {
 			return; // 如果没有设置音乐目录，直接返回
 		}
@@ -251,7 +300,9 @@ class GoFileDownloader {
 							const targetPath = join(artistPath, album);
 
 							if (!existsSync(targetPath)) {
-								await rename(itemPath, targetPath);
+								// 使用cp替代rename处理跨设备复制
+								await cp(itemPath, targetPath, { recursive: true });
+								await rm(itemPath, { recursive: true });
 								console.log(`Organized music: ${artist} - ${album}`);
 							} else {
 								console.log(`Album already exists: ${artist} - ${album}`);
@@ -264,7 +315,7 @@ class GoFileDownloader {
 
 				// 清理临时文件
 				await unlink(sourcePath);
-				await rmdir(tempExtractPath, { recursive: true });
+				await rm(tempExtractPath, { recursive: true }); // 替换rmdir
 				console.log(`Cleaned up ${sourcePath} and temporary files`);
 			}
 		} catch (error) {
@@ -272,16 +323,17 @@ class GoFileDownloader {
 		}
 	}
 
-
-	// 工具函数
-	formatRate (rate) {
+	/**
+	 * Format download rate to human readable string
+	 * @param {number} rate - Bytes per second
+	 * @returns {string} Formatted rate string (B/s, KB/s, MB/s, GB/s)
+	 */
+	formatRate(rate) {
 		if (rate < 1024) return `${rate.toFixed(1)}B/s`;
 		if (rate < 1024 * 1024) return `${(rate / 1024).toFixed(1)}KB/s`;
 		if (rate < 1024 * 1024 * 1024) return `${(rate / (1024 * 1024)).toFixed(1)}MB/s`;
 		return `${(rate / (1024 * 1024 * 1024)).toFixed(1)}GB/s`;
 	}
-
-
 }
 
 export default GoFileDownloader;
