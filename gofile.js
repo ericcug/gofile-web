@@ -214,7 +214,6 @@ class GoFileDownloader {
 			let lastUpdate = 0;
 			response.body.on('data', (chunk) => {
 				downloadedSize += chunk.length;
-				fileStream.write(chunk);
 				const now = Date.now();
 				if (now - lastUpdate >= this.progressThrottle) {
 					const progress = (downloadedSize / parseInt(totalSize)) * 100;
@@ -233,12 +232,10 @@ class GoFileDownloader {
 				}
 			});
 
-			response.body.on('end', () => {
-				fileStream.end();
-				resolve();
-			});
-
-			response.body.on('error', (err) => {
+			response.body.pipe(fileStream);
+			response.body.on('error', reject);
+			fileStream.on('finish', resolve);
+			fileStream.on('error', (err) => {
 				fileStream.close();
 				reject(err);
 			});
