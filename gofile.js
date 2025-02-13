@@ -242,7 +242,7 @@ class GoFileDownloader {
 					// 计算下载速率单位
 					let rateStr = this.formatRate(rate);
 
-					const progressMessage = `Downloading ${fileInfo.filename}: ${downloadedSize} of ${totalSize} ${progress.toFixed(1)}% ${rateStr}`;
+					const progressMessage = `Downloading ${fileInfo.filename}: ${downloadedSize / (1024 * 1024)} of ${totalSize / (1024 * 1024)} ${progress.toFixed(1)}% ${rateStr}`;
 
 					if (this.onProgress) {
 						this.onProgress(progressMessage);
@@ -265,8 +265,8 @@ class GoFileDownloader {
 			await this.organizeMusicFolder(filepath);
 			await rm(tmpFile, { recursive: true });
 			process.stdout.write('\r' + ' '.repeat(progressMessage.length));
-			console.log(`\rDownloading ${fileInfo.filename}: ${totalSize} of ${totalSize} Done!`);
-			
+			console.log(`\rDownloading ${fileInfo.filename}: ${totalSize / (1024 * 1024)} of ${totalSize / (1024 * 1024)} Done!`);
+
 		}
 	}
 
@@ -278,13 +278,15 @@ class GoFileDownloader {
 	 */
 	parseArtistAlbum(folderName) {
 		const parts = folderName.split(' - ');
-		if (parts.length !== 2) {
+		if (parts.length < 2) {
 			throw new Error(`Invalid folder name format: ${folderName}`);
 		}
-		return {
-			artist: parts[0].trim(),
-			album: parts[1].trim()
-		};
+		
+		const artist = parts[0].trim();
+		// 如果有多个'-'，将剩余部分合并为专辑名
+		const album = parts.slice(1).join(' - ').trim();
+		
+		return { artist, album };
 	}
 
 	/**
